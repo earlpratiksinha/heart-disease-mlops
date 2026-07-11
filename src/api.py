@@ -1,57 +1,69 @@
-from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel
 import joblib
 import pandas as pd
-import uvicorn
+import logging
+from fastapi import FastAPI, HTTPException
+from pydantic import BaseModel
+from prometheus_fastapi_instrumentator import Instrumentator
 
-# Initialize FastAPI app
+# 1. Setup Basic Logging
+logging.basicConfig(
+    level=logging.INFO, 
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+)
+logger = logging.getLogger(__name__)
+
 app = FastAPI(title="Heart Disease Prediction API")
 
-# Load the saved model pipeline (which includes the StandardScaler)
-try:
-    model = joblib.load('models/best_model.pkl')
-except Exception as e:
-    model = None
+# 2. Add Prometheus Metrics
+Instrumentator().instrument(app).expose(app)
 
-# Define the expected JSON input structure using Pydantic
 class PatientData(BaseModel):
-    age: float
-    sex: float
-    cp: float
-    trestbps: float
-    chol: float
-    fbs: float
-    restecg: float
-    thalach: float
-    exang: float
+    age: int
+    sex: int
+    cp: int
+    trestbps: int
+    chol: int
+    fbs: int
+    restecg: int
+    thalach: int
+    exang: int
     oldpeak: float
-    slope: float
-    ca: float
-    thal: float
+    slope: int
+    ca: int
+    thal: int
+
+try:
+    model = joblib.load("models/best_model.pkl")
+    logger.info("Model loaded successfully.")
+except Exception as e:
+    logger.error(f"Error loading model: {e}")
+    model = None
 
 @app.get("/")
 def home():
-    return {"message": "Heart Disease Prediction API is running. Use /predict to get predictions."}
+    logger.info("Home endpoint accessed.")
+    return {"message": "Heart Disease Prediction API is running"}
 
 @app.post("/predict")
 def predict(data: PatientData):
     if model is None:
-        raise HTTPException(status_code=500, detail="Model not loaded on server.")
+        logger.error("Prediction failed: Model is not loaded.")
+        raise HTTPException(status_code=500, detail="Model not loaded")
     
-    # Convert input data to a Pandas DataFrame
-    input_data = pd.DataFrame([data.model_dump()])
-    
-    # Make prediction
     try:
-        prediction = model.predict(input_data)[0]
-        probability = model.predict_proba(input_data)[0][1]
+        logger.info(f"Incoming prediction request for age: {data.age}, sex: {data.sex}")
+        input_data = pd.DataFrame([data.model_dump()])
+        
+        prediction = model.predict(input_data)
+        probability = model.predict_proba(input_data)[0].max()
+        
+        result = int(prediction[0])
+        logger.info(f"Prediction successful: {result} (Confidence: {probability:.2f})")
         
         return {
-            "prediction": int(prediction),
+            "prediction": result,
             "confidence": float(probability)
         }
     except Exception as e:
+        logger.error(f"Error during prediction: {e}")
         raise HTTPException(status_code=400, detail=str(e))
-
-if __name__ == "__main__":
-    uvicorn.run(app, host="0.0.0.0", port=8000)

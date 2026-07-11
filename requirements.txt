@@ -10,3 +10,4 @@ pytest
 ucimlrepo
 pytest
 httpx2
+prometheus-fastapi-instrumentator
