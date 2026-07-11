@@ -6,7 +6,6 @@ seaborn
 mlflow
 fastapi
 uvicorn
-pytest
 ucimlrepo
 pytest
 httpx2
